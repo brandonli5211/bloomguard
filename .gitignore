@@ -71,3 +71,7 @@ Desktop.ini
 *.temp
 *.cache
 .cache/
+
+# Generated assets (but keep demo image)
+backend/assets/*.png
+!backend/assets/demo_heatmap.png
