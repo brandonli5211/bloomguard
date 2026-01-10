@@ -43,10 +43,10 @@ export default function LakeMap() {
   });
 
   return (
-    <div className="relative w-full h-screen">
-      <div className="absolute top-0 left-0 z-10 p-4 bg-white/90 backdrop-blur-sm">
-        <h1 className="text-2xl font-[var(--font-inter)] font-semibold text-gray-900">
-          Algae Watch
+    <div className="relative w-full h-screen bg-slate-50">
+      <div className="absolute top-0 left-0 z-10 p-4 bg-slate-50/95 backdrop-blur-sm border-b border-r border-slate-200/60 shadow-sm">
+        <h1 className="text-2xl font-[var(--font-inter)] font-semibold text-slate-700">
+          Bloomguard
         </h1>
       </div>
       <Map
@@ -79,10 +79,10 @@ export default function LakeMap() {
             id="drift-prediction-line"
             type="line"
             paint={{
-              'line-color': '#FFD700', // Yellow
+              'line-color': '#7DD3FC', // Light blue
               'line-width': 3,
               'line-dasharray': [2, 2], // Dashed pattern
-              'line-opacity': 0.8,
+              'line-opacity': 0.7,
             }}
           />
         </Source>
