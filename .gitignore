@@ -39,3 +39,7 @@ yarn-error.log*
 # OS
 .DS_Store
 Thumbs.db
+
+# Generated assets (but keep demo image)
+backend/assets/*.png
+!backend/assets/demo_heatmap.png
