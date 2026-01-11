@@ -46,7 +46,7 @@ export default function LakeMap() {
   // Target location (Lake Erie)
   const TARGET_LON = -81.25;
   const TARGET_LAT = 42.12;
-  const TARGET_ZOOM = 10;
+  const TARGET_ZOOM = 13;
 
   // Start zoomed out (globe view)
   const [viewState, setViewState] = useState({
@@ -68,8 +68,11 @@ export default function LakeMap() {
   // Animation state for drone path
   const [dashOffset, setDashOffset] = useState(0);
   
-  // State for minimizing tactical record
-  const [isTacticalRecordMinimized, setIsTacticalRecordMinimized] = useState(false);
+  // State for minimizing tactical record (starts minimized)
+  const [isTacticalRecordMinimized, setIsTacticalRecordMinimized] = useState(true);
+  
+  // State for minimizing legend (starts minimized)
+  const [isLegendMinimized, setIsLegendMinimized] = useState(true);
 
   // Fetch analysis data for the target location (Lake Erie)
   useEffect(() => {
@@ -99,8 +102,10 @@ export default function LakeMap() {
   useEffect(() => {
     // Phase 1: Rotate and move to position above Lake Erie (2.5 seconds)
     // Phase 2: Zoom into Lake Erie from above (2 seconds)
+    // Phase 3: Tilt camera to align with path (1.5 seconds)
     const rotationDuration = 2500;
     const zoomDuration = 2000;
+    const tiltDuration = 1500;
     
     // Start animation after a brief delay to let map load
     const timeout = setTimeout(() => {
@@ -191,7 +196,39 @@ export default function LakeMap() {
             if (zoomProgress < 1) {
               requestAnimationFrame(zoomToTarget);
             } else {
-              setIsAnimating(false);
+              // Phase 3: Tilt camera to align with path
+              const tiltStartTime = Date.now();
+              const startPitch = 0;
+              const targetPitch = 60; // Tilt 60 degrees for better path alignment
+              
+              const tiltCamera = () => {
+                const tiltElapsed = Date.now() - tiltStartTime;
+                const tiltProgress = Math.min(tiltElapsed / tiltDuration, 1);
+                
+                // Easing function (ease-in-out)
+                const tiltEaseInOut = tiltProgress < 0.5
+                  ? 2 * tiltProgress * tiltProgress
+                  : 1 - Math.pow(-2 * tiltProgress + 2, 2) / 2;
+
+                // Interpolate pitch
+                const currentPitch = startPitch + (targetPitch - startPitch) * tiltEaseInOut;
+
+                setViewState({
+                  longitude: TARGET_LON,
+                  latitude: TARGET_LAT,
+                  zoom: TARGET_ZOOM,
+                  bearing: targetBearing,
+                  pitch: currentPitch,
+                });
+
+                if (tiltProgress < 1) {
+                  requestAnimationFrame(tiltCamera);
+                } else {
+                  setIsAnimating(false);
+                }
+              };
+
+              requestAnimationFrame(tiltCamera);
             }
           };
 
@@ -489,6 +526,91 @@ export default function LakeMap() {
           )}
         </Source>
       </Map>
+      
+      {/* Legend Pane - Bottom Right */}
+      <div className={`absolute bottom-0 right-0 z-10 bg-slate-50/95 backdrop-blur-sm border-t border-l border-slate-200/60 shadow-sm ${isLegendMinimized ? 'p-2' : 'p-4 max-w-sm'}`}>
+        <div className={`flex items-center ${isLegendMinimized ? 'justify-center' : 'justify-between'} gap-2 ${isLegendMinimized ? '' : 'mb-3'}`}>
+          <h2 className={`font-[var(--font-inter)] font-semibold text-slate-700 ${isLegendMinimized ? 'text-sm' : 'text-lg'}`}>
+            Legend
+          </h2>
+          <button
+            onClick={() => setIsLegendMinimized(!isLegendMinimized)}
+            className="text-slate-400 hover:text-slate-600 transition-colors p-1"
+            aria-label={isLegendMinimized ? "Expand" : "Minimize"}
+          >
+            <svg 
+              className={`w-4 h-4 transition-transform ${isLegendMinimized ? 'rotate-180' : ''}`}
+              fill="none" 
+              viewBox="0 0 24 24" 
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        </div>
+        
+        {!isLegendMinimized && (
+          <div className="space-y-4">
+            {/* Risk Score Colors */}
+            <div>
+              <h3 className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">
+                Risk Score
+              </h3>
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded bg-green-600"></div>
+                  <span className="text-xs text-slate-600">Low (0-25%)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded bg-yellow-600"></div>
+                  <span className="text-xs text-slate-600">Medium (25-50%)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded bg-red-600"></div>
+                  <span className="text-xs text-slate-600">High (50-100%)</span>
+                </div>
+              </div>
+            </div>
+            
+            {/* Map Elements */}
+            <div>
+              <h3 className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">
+                Map Elements
+              </h3>
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded" style={{ background: 'linear-gradient(to right, #f97316, #dc2626)' }}></div>
+                  <span className="text-xs text-slate-600">Algae Heatmap</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-cyan-500 bg-cyan-500/20"></div>
+                  <span className="text-xs text-slate-600">Drone Path</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-blue-500 bg-blue-500/20"></div>
+                  <span className="text-xs text-slate-600">Drift Prediction</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-slate-700 border-2 border-white"></div>
+                  <span className="text-xs text-slate-600">Home Base</span>
+                </div>
+              </div>
+            </div>
+            
+            {/* Data Sources */}
+            <div>
+              <h3 className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">
+                Data Sources
+              </h3>
+              <div className="space-y-1.5 text-xs text-slate-500">
+                <div>• Sentinel Hub (Satellite Imagery)</div>
+                <div>• Weather API (Wind & Currents)</div>
+                <div>• Google Generative AI (Analysis)</div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
