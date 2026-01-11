@@ -12,11 +12,12 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 // Format: [lon, lat] for each corner: SW, SE, NE, NW
 // Updated to better match actual Lake Erie boundaries
 
+// Updated to a tight 2km box around the center point (-81.25, 42.12)
 const LAKE_ERIE_BOUNDS: [[number, number], [number, number], [number, number], [number, number]] = [
-  [-81.30, 42.17], // Top Left (North West)
-  [-81.20, 42.17], // Top Right (North East)
-  [-81.20, 42.07], // Bottom Right (South East)
-  [-81.30, 42.07], // Bottom Left (South West)
+  [-81.26, 42.13], // Top Left
+  [-81.24, 42.13], // Top Right
+  [-81.24, 42.11], // Bottom Right
+  [-81.26, 42.11], // Bottom Left
 ];
 
 // Drift Prediction Line (Point A to Point B)
