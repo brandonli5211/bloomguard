@@ -16,7 +16,7 @@ const roboto = Roboto({
 });
 
 export const metadata: Metadata = {
-  title: "Algae Watch",
+  title: "Bloomguard",
   description: "Scientific dashboard for monitoring toxic algal blooms",
 };
 
