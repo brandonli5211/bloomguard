@@ -1,16 +1,17 @@
+from dotenv import load_dotenv
+import os
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List
-from dotenv import load_dotenv
-import os
 import math
 import logging
+from services.ai_analyst import generate_situation_report
 
 # Import services
 from services.sentinel import fetch_satellite_image
-from services.drift import predict_drift
+from services.drift import predict_drift, get_wind_data
 
 # Load environment variables
 load_dotenv()
@@ -77,55 +78,36 @@ def _calculate_risk_score(lat: float, lon: float) -> float:
 
 @app.post("/api/analyze", response_model=AnalyzeResponse)
 async def analyze_location(request: AnalyzeRequest):
-    try:
-        lat = request.lat
-        lon = request.lon
+    logger.info(f"Analyzing location: ({request.lat}, {request.lon})")
 
-        # Validate coordinates
-        if not (-90 <= lat <= 90):
-            raise HTTPException(status_code=400, detail=f"Invalid latitude: {lat}")
-        if not (-180 <= lon <= 180):
-            raise HTTPException(status_code=400, detail=f"Invalid longitude: {lon}")
+    # 1. Fetch Real Environmental Data
+    # We call this explicitly so we can use the wind speed in our math
+    wind_speed, wind_deg = get_wind_data(request.lat, request.lon)
 
-        logger.info(f"Analyzing location: ({lat}, {lon})")
+    # 2. Dynamic Algorithm: "Turbulence-Toxicity Correlation"
+    # Logic: Stagnant water (low wind) promotes bloom growth.
+    # High wind breaks up the surface scum, lowering immediate risk.
+    # Base risk is 90%. We subtract 2% risk for every 1 km/h of wind.
+    calculated_risk = 0.90 - (wind_speed * 0.02)
 
-        # 1. Fetch satellite image
-        bbox = _lat_lon_to_bbox(lat, lon)
-        image_path = fetch_satellite_image(bbox)
+    # Clamp the result so it stays between 0.10 and 0.95
+    # (We never want it to be 0% or >100%)
+    risk_score = max(0.10, min(0.95, calculated_risk))
 
-        # --- FIX 3: SIMPLIFIED URL LOGIC ---
-        # Ensure we serve the file correctly regardless of absolute/relative paths
-        filename = os.path.basename(image_path)
-        image_url = f"/assets/{filename}"
+    # 3. Calculate Drift Vector
+    drift_vec = predict_drift(request.lat, request.lon)
 
-        # 2. Predict drift
-        drift_vector = predict_drift(lat, lon)
+    # 4. AI Commander Analysis
+    # We pass the calculated numbers to Gemini for the "Human" report
+    ai_text = generate_situation_report(risk_score, wind_speed, wind_deg)
 
-        # 3. Calculate risk score
-        risk_score = _calculate_risk_score(lat, lon)
-
-        # 4. AI report (placeholder)
-        ai_report = ""
-
-        # 5. Flight path (placeholder)
-        flight_path: List[List[float]] = []
-
-        response = AnalyzeResponse(
-            image_url=image_url,
-            risk_score=risk_score,
-            drift_vector=drift_vector,
-            ai_report=ai_report,
-            flight_path=flight_path,
-        )
-
-        logger.info(f"Analysis complete for ({lat}, {lon})")
-        return response
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error analyzing location: {e}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+    return AnalyzeResponse(
+        image_url="/assets/demo_heatmap.png",
+        risk_score=risk_score,
+        drift_vector=drift_vec,
+        ai_report=ai_text,
+        flight_path=[],
+    )
 
 
 if __name__ == "__main__":
