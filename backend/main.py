@@ -8,6 +8,7 @@ from typing import List
 import math
 import logging
 from services.ai_analyst import generate_situation_report
+from services.mission import generate_flight_path
 
 # Import services
 from services.sentinel import fetch_satellite_image
@@ -80,33 +81,42 @@ def _calculate_risk_score(lat: float, lon: float) -> float:
 async def analyze_location(request: AnalyzeRequest):
     logger.info(f"Analyzing location: ({request.lat}, {request.lon})")
 
-    # 1. Fetch Real Environmental Data
-    # We call this explicitly so we can use the wind speed in our math
+    # 1. Fetch Real Wind Data
     wind_speed, wind_deg = get_wind_data(request.lat, request.lon)
 
-    # 2. Dynamic Algorithm: "Turbulence-Toxicity Correlation"
-    # Logic: Stagnant water (low wind) promotes bloom growth.
-    # High wind breaks up the surface scum, lowering immediate risk.
-    # Base risk is 90%. We subtract 2% risk for every 1 km/h of wind.
+    # 2. Dynamic Risk Calculation
     calculated_risk = 0.90 - (wind_speed * 0.02)
-
-    # Clamp the result so it stays between 0.10 and 0.95
-    # (We never want it to be 0% or >100%)
     risk_score = max(0.10, min(0.95, calculated_risk))
 
     # 3. Calculate Drift Vector
     drift_vec = predict_drift(request.lat, request.lon)
 
-    # 4. AI Commander Analysis
-    # We pass the calculated numbers to Gemini for the "Human" report
+    # --- PHASE 4 NEW LOGIC STARTS HERE ---
+
+    # 4. Generate Drone Flight Path
+    # Path starts from Port Stanley, goes to algae location, then zigzags along drift
+    flight_path = generate_flight_path(
+        request.lat, request.lon, drift_vec[0], drift_vec[1]
+    )
+
+    # 5. Enhance the AI Report
+    # We append a tactical note so the text matches the orange line on the map
+    mission_text = "\nTACTICAL PLAN: Drone Intercept Pattern Generated (Zig-Zag Grid)."
+
+    # Generate the base report
     ai_text = generate_situation_report(risk_score, wind_speed, wind_deg)
+
+    # Combine them
+    full_report = f"{ai_text}{mission_text}"
+
+    # --- PHASE 4 NEW LOGIC ENDS HERE ---
 
     return AnalyzeResponse(
         image_url="/assets/demo_heatmap.png",
         risk_score=risk_score,
         drift_vector=drift_vec,
-        ai_report=ai_text,
-        flight_path=[],
+        ai_report=full_report,  # Sending the enhanced text
+        flight_path=flight_path,  # Sending the real flight coordinates
     )
 
 
