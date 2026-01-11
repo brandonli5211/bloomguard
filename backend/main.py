@@ -94,7 +94,7 @@ async def analyze_location(request: AnalyzeRequest):
     # --- PHASE 4 NEW LOGIC STARTS HERE ---
 
     # 4. Generate Drone Flight Path
-    # We pass the start point (request) and end point (drift_vec)
+    # Path starts from Port Stanley, goes to algae location, then zigzags along drift
     flight_path = generate_flight_path(
         request.lat, request.lon, drift_vec[0], drift_vec[1]
     )

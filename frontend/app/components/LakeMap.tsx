@@ -51,6 +51,8 @@ export default function LakeMap() {
   const [analysisData, setAnalysisData] = useState<AnalyzeResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Store the actual analyzed location (not viewState which can change when panning)
+  const [analyzedLocation, setAnalyzedLocation] = useState<{ lat: number; lon: number } | null>(null);
 
   // Extract lon/lat from viewState for internal use
   const lon = viewState.longitude;
@@ -67,6 +69,8 @@ export default function LakeMap() {
           lon: lon,
         });
         setAnalysisData(response);
+        // Store the actual location that was analyzed
+        setAnalyzedLocation({ lat, lon });
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch analysis');
         console.error('API Error:', err);
@@ -79,7 +83,8 @@ export default function LakeMap() {
   }, []);
 
   // Build drift prediction GeoJSON from API response
-  const driftGeoJSON = analysisData?.drift_vector
+  // Use the actual analyzed location as the start point, not the current viewState center
+  const driftGeoJSON = analysisData?.drift_vector && analyzedLocation
     ? {
         type: 'FeatureCollection' as const,
         features: [
@@ -91,20 +96,58 @@ export default function LakeMap() {
             geometry: {
               type: 'LineString' as const,
               coordinates: [
-                [lon, lat], // Starting point [lon, lat]
-                [analysisData.drift_vector[1], analysisData.drift_vector[0]], // [lon, lat] from drift_vector [lat, lon]
+                [analyzedLocation.lon, analyzedLocation.lat], // Starting point from actual analyzed location [lon, lat]
+                [analysisData.drift_vector[1], analysisData.drift_vector[0]], // Predicted drift location [lon, lat] from drift_vector [lat, lon]
               ],
             },
           },
         ],
       }
     : DRIFT_PREDICTION_GEOJSON; // Fallback to hardcoded data
+    
+  // Port Stanley, Ontario - Home base for drone deployment
+  const PORT_STANLEY_LAT = 42.66;
+  const PORT_STANLEY_LON = -81.22;
 
-  // Use API image URL or fallback to demo
+  // Build flight path: Backend now returns Port Stanley → Algae → Zigzag pattern
+  const flightPathGeoJSON = analysisData?.flight_path
+    ? {
+        type: 'FeatureCollection' as const,
+        features: [
+          {
+            type: 'Feature' as const,
+            properties: { name: 'Drone Path' },
+            geometry: {
+              type: 'LineString' as const,
+              // Backend sends [lat, lon], Mapbox expects [lon, lat]
+              coordinates: analysisData.flight_path.map((p) => [p[1], p[0]]),
+            },
+          },
+        ],
+      }
+    : null;
+
+  // Port Stanley marker GeoJSON
+  const portStanleyMarker = {
+    type: 'FeatureCollection' as const,
+    features: [
+      {
+        type: 'Feature' as const,
+        properties: { name: 'Port Stanley - Home Base' },
+        geometry: {
+          type: 'Point' as const,
+          coordinates: [PORT_STANLEY_LON, PORT_STANLEY_LAT],
+        },
+      },
+    ],
+  };
+
+    // Use API image URL or fallback to demo
   const heatmapUrl = analysisData?.image_url
     ? `${API_BASE_URL}${analysisData.image_url}`
     : '/demo_heatmap.png';
 
+  
   return (
     <div className="relative w-full h-screen bg-slate-50">
       <div className="absolute top-0 left-0 z-10 p-4 bg-slate-50/95 backdrop-blur-sm border-b border-r border-slate-200/60 shadow-sm">
@@ -155,6 +198,40 @@ export default function LakeMap() {
             }}
           />
         </Source>
+        {/* Port Stanley Home Base Marker */}
+        <Source id="port-stanley-marker" type="geojson" data={portStanleyMarker}>
+          <Layer
+            id="port-stanley-circle"
+            type="circle"
+            paint={{
+              'circle-radius': 10,
+              'circle-color': '#1F2937', // Dark gray/black
+              'circle-opacity': 1.0,
+              'circle-stroke-width': 3,
+              'circle-stroke-color': '#FFFFFF',
+            }}
+          />
+        </Source>
+        {/* PHASE 4: Drone Flight Path Layer - Purple dashed line from Port Stanley → Algae → Zigzag */}
+        {flightPathGeoJSON && (
+          <Source id="flight-path" type="geojson" data={flightPathGeoJSON}>
+            <Layer
+              id="flight-path-line"
+              type="line"
+              paint={{
+                'line-color': '#06B6D4', // Vibrant cyan/teal for drone path
+                'line-width': 4,
+                'line-opacity': 0.9,
+                'line-dasharray': [4, 2], // Dashed pattern
+              }}
+              layout={{
+                'line-cap': 'round',
+                'line-join': 'round',
+              }}
+            />
+          </Source>
+        )}
+        {/* Drift Prediction Arrow - Rendered AFTER flight path to overlap on top */}
         <Source
           id="drift-prediction"
           type="geojson"
@@ -164,12 +241,47 @@ export default function LakeMap() {
             id="drift-prediction-line"
             type="line"
             paint={{
-              'line-color': '#7DD3FC', // Light blue
-              'line-width': 3,
-              'line-dasharray': [2, 2], // Dashed pattern
-              'line-opacity': 0.7,
+              'line-color': '#3B82F6', // Bright blue for visibility
+              'line-width': 10, // Thick arrow shaft
+              'line-opacity': 1.0, // Fully opaque
+            }}
+            layout={{
+              'line-cap': 'round',
+              'line-join': 'round',
             }}
           />
+          {/* Arrow head at the end point */}
+          {analysisData?.drift_vector && analyzedLocation && (
+            <Source
+              id="drift-arrow-head"
+              type="geojson"
+              data={{
+                type: 'FeatureCollection' as const,
+                features: [
+                  {
+                    type: 'Feature' as const,
+                    properties: {},
+                    geometry: {
+                      type: 'Point' as const,
+                      coordinates: [analysisData.drift_vector[1], analysisData.drift_vector[0]], // [lon, lat]
+                    },
+                  },
+                ],
+              }}
+            >
+              <Layer
+                id="drift-arrow-marker"
+                type="circle"
+                paint={{
+                  'circle-radius': 16, // Larger arrowhead for visibility
+                  'circle-color': '#3B82F6', // Bright blue
+                  'circle-opacity': 1.0,
+                  'circle-stroke-width': 4, // Thick white border for contrast
+                  'circle-stroke-color': '#FFFFFF',
+                }}
+              />
+            </Source>
+          )}
         </Source>
       </Map>
     </div>
