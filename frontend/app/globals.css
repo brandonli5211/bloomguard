@@ -10,3 +10,18 @@ body {
   background-color: #F8FAFC; /* Muted gray-50 (slate-50) */
   color: #334155; /* Muted gray-700 (slate-700) */
 }
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.5s ease-out;
+}

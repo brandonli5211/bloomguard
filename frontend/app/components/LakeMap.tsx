@@ -73,6 +73,10 @@ export default function LakeMap() {
   
   // State for minimizing legend (starts minimized)
   const [isLegendMinimized, setIsLegendMinimized] = useState(true);
+  
+  // State for drone deployment
+  const [dronesDeployed, setDronesDeployed] = useState(false);
+  const [pathAnimationProgress, setPathAnimationProgress] = useState(0);
 
   // Fetch analysis data for the target location (Lake Erie)
   useEffect(() => {
@@ -253,6 +257,33 @@ export default function LakeMap() {
     return () => clearInterval(interval);
   }, []);
 
+  // Handle drone deployment - animate path drawing
+  const handleDeployDrones = () => {
+    if (dronesDeployed) return; // Already deployed
+    
+    setDronesDeployed(true);
+    setPathAnimationProgress(0);
+    
+    // Animate path drawing over 2 seconds
+    const duration = 2000;
+    const startTime = Date.now();
+    
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      // Easing function for smooth animation
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setPathAnimationProgress(eased);
+      
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      }
+    };
+    
+    requestAnimationFrame(animate);
+  };
+
   // Build drift prediction GeoJSON from API response
   // Use the actual analyzed location as the start point, not the current viewState center
   const driftGeoJSON = analysisData?.drift_vector && analyzedLocation
@@ -345,7 +376,7 @@ export default function LakeMap() {
           </div>
         )}
               {/* TACTICAL RECORD DISPLAY */}
-              {analysisData?.ai_report && (
+              {(loading || analysisData?.ai_report) && (
             <div className="mt-4 bg-slate-800 rounded border-l-4 border-red-500 shadow-sm max-w-sm">
               <div className="flex items-center justify-between gap-2 p-3">
                 <div className="flex items-center gap-2">
@@ -354,24 +385,38 @@ export default function LakeMap() {
                     Tactical Report
                   </span>
                 </div>
-                <button
-                  onClick={() => setIsTacticalRecordMinimized(!isTacticalRecordMinimized)}
-                  className="text-slate-400 hover:text-slate-200 transition-colors p-1"
-                  aria-label={isTacticalRecordMinimized ? "Expand" : "Minimize"}
-                >
-                  <svg 
-                    className={`w-4 h-4 transition-transform ${isTacticalRecordMinimized ? 'rotate-180' : ''}`}
-                    fill="none" 
-                    viewBox="0 0 24 24" 
-                    stroke="currentColor"
+                {analysisData?.ai_report && (
+                  <button
+                    onClick={() => setIsTacticalRecordMinimized(!isTacticalRecordMinimized)}
+                    className="text-slate-400 hover:text-slate-200 transition-colors p-1"
+                    aria-label={isTacticalRecordMinimized ? "Expand" : "Minimize"}
                   >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
+                    <svg 
+                      className={`w-4 h-4 transition-transform ${isTacticalRecordMinimized ? 'rotate-180' : ''}`}
+                      fill="none" 
+                      viewBox="0 0 24 24" 
+                      stroke="currentColor"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                )}
               </div>
-              {!isTacticalRecordMinimized && (
+              {loading && !analysisData?.ai_report && (
                 <div className="px-3 pb-3">
-                  <p className="text-xs font-mono text-green-400 leading-relaxed">
+                  <div className="flex items-center gap-2">
+                    <div className="flex gap-1">
+                      <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                      <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                      <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                    </div>
+                    <span className="text-xs font-mono text-green-400">Analyzing data...</span>
+                  </div>
+                </div>
+              )}
+              {!isTacticalRecordMinimized && analysisData?.ai_report && (
+                <div className="px-3 pb-3">
+                  <p className="text-xs font-mono text-green-400 leading-relaxed animate-fade-in">
                     {analysisData.ai_report}
                   </p>
                 </div>
@@ -455,7 +500,7 @@ export default function LakeMap() {
           />
         </Source>
         {/* PHASE 4: Drone Flight Path Layer - Animated dashed line from Port Stanley → Algae → Zigzag */}
-        {flightPathGeoJSON && (
+        {flightPathGeoJSON && dronesDeployed && (
           <Source id="flight-path" type="geojson" data={flightPathGeoJSON}>
             <Layer
               id="flight-path-line"
@@ -463,7 +508,7 @@ export default function LakeMap() {
               paint={{
                 'line-color': '#06B6D4', // Vibrant cyan/teal for drone path
                 'line-width': 4 + Math.sin(dashOffset * 0.5) * 0.5, // Subtle animated width
-                'line-opacity': 0.9,
+                'line-opacity': pathAnimationProgress * 0.9, // Animate opacity from 0 to 0.9
                 'line-dasharray': [4 + dashOffset * 0.3, 2 - dashOffset * 0.1], // Animated dash pattern
               }}
               layout={{
@@ -611,6 +656,18 @@ export default function LakeMap() {
           </div>
         )}
       </div>
+      
+      {/* Deploy Drones Button - Bottom Left */}
+      {analysisData?.flight_path && !dronesDeployed && (
+        <div className="absolute bottom-4 left-4 z-10">
+          <button
+            onClick={handleDeployDrones}
+            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-lg transition-all duration-200 transform hover:scale-105 active:scale-95"
+          >
+            Deploy Drones
+          </button>
+        </div>
+      )}
     </div>
   );
 }
