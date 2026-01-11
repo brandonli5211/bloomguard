@@ -5,7 +5,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Configure the API Key
-# MAKE SURE YOU HAVE 'GEMINI_API_KEY' IN YOUR .ENV FILE
+# MAKE SURE YOU HAVE 'GOOGLE_API_KEY' IN YOUR .ENV FILE
 
 
 def generate_situation_report(
@@ -16,7 +16,10 @@ def generate_situation_report(
     """
     genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
     try:
-        model = genai.GenerativeModel("gemini-pro")
+        # Use gemini-2.5-flash (stable, latest) or gemini-2.0-flash (stable alternative)
+        # Reference: https://ai.google.dev/gemini-api/docs/models
+        # Stable models: gemini-2.5-flash, gemini-2.0-flash, gemini-1.5-pro
+        model = genai.GenerativeModel("gemini-2.5-flash")
 
         # The prompt forces the AI to be concise and tactical
         prompt = f"""

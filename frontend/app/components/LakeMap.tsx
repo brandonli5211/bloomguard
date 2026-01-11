@@ -116,6 +116,21 @@ export default function LakeMap() {
             <p>Risk Score: <span className="font-semibold">{(analysisData.risk_score * 100).toFixed(0)}%</span></p>
           </div>
         )}
+              {/* AI ANALYST DISPLAY */}
+              {analysisData?.ai_report && (
+            <div className="mt-4 p-3 bg-slate-800 rounded border-l-4 border-red-500 shadow-sm max-w-sm">
+              <div className="flex items-center gap-2 mb-2">
+                 <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                 <span className="text-[10px] font-bold tracking-widest text-slate-400 uppercase">
+                   AI Tactical Report
+                 </span>
+              </div>
+              <p className="text-xs font-mono text-green-400 leading-relaxed">
+                {analysisData.ai_report}
+              </p>
+            </div>
+          )}
+
         {loading && <p className="text-xs text-slate-500 mt-1">Loading analysis...</p>}
         {error && <p className="text-xs text-red-600 mt-1">Error: {error}</p>}
       </div>
