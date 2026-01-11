@@ -4,7 +4,7 @@
  */
 
 /**
- * Coordinate pair [latitude, longitude]
+ * Coordinate pair [lat, lon]
  */
 export type Coordinate = [number, number];
 
@@ -24,7 +24,7 @@ export interface AnalyzeResponse {
   image_url: string;
   /** Risk score between 0.0 and 1.0 */
   risk_score: number;
-  /** Predicted drift location as [latitude, longitude] */
+  /** Predicted drift location as [lat, lon] */
   drift_vector: Coordinate;
   /** AI-generated analysis report */
   ai_report: string;
