@@ -10,11 +10,13 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 // Lake Erie approximate bounds for image overlay
 // Format: [lon, lat] for each corner: SW, SE, NE, NW
+// Updated to better match actual Lake Erie boundaries
+
 const LAKE_ERIE_BOUNDS: [[number, number], [number, number], [number, number], [number, number]] = [
-  [-83.5, 41.3], // Southwest corner
-  [-82.0, 41.3], // Southeast corner
-  [-82.0, 42.9], // Northeast corner
-  [-83.5, 42.9], // Northwest corner
+  [-81.30, 42.17], // Top Left (North West)
+  [-81.20, 42.17], // Top Right (North East)
+  [-81.20, 42.07], // Bottom Right (South East)
+  [-81.30, 42.07], // Bottom Left (South West)
 ];
 
 // Drift Prediction Line (Point A to Point B)
@@ -41,14 +43,18 @@ const DRIFT_PREDICTION_GEOJSON = {
 
 export default function LakeMap() {
   const [viewState, setViewState] = useState({
-    longitude: -83.0,
-    latitude: 41.85,
-    zoom: 8,
+    longitude: -81.25, // Required by react-map-gl (kept as longitude for library compatibility)
+    latitude: 42.12,  // Required by react-map-gl (kept as latitude for library compatibility)
+    zoom: 10,
   });
 
   const [analysisData, setAnalysisData] = useState<AnalyzeResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Extract lon/lat from viewState for internal use
+  const lon = viewState.longitude;
+  const lat = viewState.latitude;
 
   // Fetch analysis data for the center of Lake Erie
   useEffect(() => {
@@ -57,8 +63,8 @@ export default function LakeMap() {
       setError(null);
       try {
         const response = await analyzeLocation({
-          lat: viewState.latitude,
-          lon: viewState.longitude,
+          lat: lat,
+          lon: lon,
         });
         setAnalysisData(response);
       } catch (err) {
@@ -70,7 +76,7 @@ export default function LakeMap() {
     };
 
     fetchAnalysis();
-  }, [viewState.latitude, viewState.longitude]);
+  }, []);
 
   // Build drift prediction GeoJSON from API response
   const driftGeoJSON = analysisData?.drift_vector
@@ -85,7 +91,7 @@ export default function LakeMap() {
             geometry: {
               type: 'LineString' as const,
               coordinates: [
-                [viewState.longitude, viewState.latitude], // Starting point [lon, lat]
+                [lon, lat], // Starting point [lon, lat]
                 [analysisData.drift_vector[1], analysisData.drift_vector[0]], // [lon, lat] from drift_vector [lat, lon]
               ],
             },
