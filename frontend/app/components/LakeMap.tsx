@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Map, { Source, Layer } from 'react-map-gl/mapbox';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { analyzeLocation } from '../lib/api';
@@ -49,10 +49,42 @@ export default function LakeMap() {
   const [analysisData, setAnalysisData] = useState<AnalyzeResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const hasInitialLoadRef = useRef(false);
 
-  // Fetch analysis data for the center of Lake Erie
+  // TEMPORARY FIX: Debounced API calls to prevent excessive requests during map movement
+  // TODO: Consider replacing with explicit "Analyze" button or only fetch on initial load
   useEffect(() => {
-    const fetchAnalysis = async () => {
+    // Clear any existing timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    // Initial load: fetch immediately
+    if (!hasInitialLoadRef.current) {
+      hasInitialLoadRef.current = true;
+      const fetchAnalysis = async () => {
+        setLoading(true);
+        setError(null);
+        try {
+          const response = await analyzeLocation({
+            lat: viewState.latitude,
+            lon: viewState.longitude,
+          });
+          setAnalysisData(response);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Failed to fetch analysis');
+          console.error('API Error:', err);
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchAnalysis();
+      return;
+    }
+
+    // Subsequent movements: debounce for 1 second
+    debounceTimerRef.current = setTimeout(async () => {
       setLoading(true);
       setError(null);
       try {
@@ -67,9 +99,14 @@ export default function LakeMap() {
       } finally {
         setLoading(false);
       }
-    };
+    }, 1000); // Wait 1 second after user stops moving map
 
-    fetchAnalysis();
+    // Cleanup timer on unmount or dependency change
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
   }, [viewState.latitude, viewState.longitude]);
 
   // Build drift prediction GeoJSON from API response
