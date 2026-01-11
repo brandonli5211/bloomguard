@@ -1,27 +1,30 @@
-import google.generativeai as genai
 import os
 import logging
+from dotenv import load_dotenv
+from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
-# Configure the API Key
-# MAKE SURE YOU HAVE 'GOOGLE_API_KEY' IN YOUR .ENV FILE
-
-
-def generate_situation_report(
-    risk_score: float, wind_speed: float, wind_dir: float
-) -> str:
+def generate_situation_report(risk_score: float, wind_speed: float, wind_dir: float) -> str:
     """
-    Uses Gemini to generate a short, tactical situation report.
+    Uses OpenRouter to access Gemini Flash 2.0 for the tactical report.
     """
-    genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+    load_dotenv()
+    
+    # 1. Get the OpenRouter Key
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    
+    if not api_key:
+        logger.error("CRITICAL: OPENROUTER_API_KEY is missing.")
+        return "SYSTEM ERROR: API Key missing."
+
     try:
-        # Use gemini-2.5-flash (stable, latest) or gemini-2.0-flash (stable alternative)
-        # Reference: https://ai.google.dev/gemini-api/docs/models
-        # Stable models: gemini-2.5-flash, gemini-2.0-flash, gemini-1.5-pro
-        model = genai.GenerativeModel("gemini-2.5-flash")
+        # 2. Configure Client
+        client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=api_key,
+        )
 
-        # The prompt forces the AI to be concise and tactical
         prompt = f"""
         You are an environmental crisis commander. 
         Current Status:
@@ -37,8 +40,17 @@ def generate_situation_report(
         Output text only. No markdown formatting.
         """
 
-        response = model.generate_content(prompt)
-        return response.text
+        # 3. Call Gemini Flash 2.0
+        completion = client.chat.completions.create(
+            model="google/gemini-2.0-flash-001", 
+            messages=[
+                {"role": "system", "content": "You are a tactical environmental analyst."},
+                {"role": "user", "content": prompt}
+            ]
+        )
+
+        return completion.choices[0].message.content
+
     except Exception as e:
         logger.error(f"AI Generation failed: {e}")
-        return "SYSTEM OFFLINE: Unable to generate tactical report. Proceed with standard containment protocols."
+        return "SYSTEM OFFLINE: Unable to connect to Command Uplink."

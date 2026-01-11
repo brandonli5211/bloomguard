@@ -43,35 +43,47 @@ const DRIFT_PREDICTION_GEOJSON = {
 };
 
 export default function LakeMap() {
+  // Target location (Lake Erie)
+  const TARGET_LON = -81.25;
+  const TARGET_LAT = 42.12;
+  const TARGET_ZOOM = 10;
+
+  // Start zoomed out (globe view)
   const [viewState, setViewState] = useState({
-    longitude: -81.25, // Required by react-map-gl (kept as longitude for library compatibility)
-    latitude: 42.12,  // Required by react-map-gl (kept as latitude for library compatibility)
-    zoom: 10,
+    longitude: 0, // Center of globe
+    latitude: 0,   // Center of globe
+    zoom: 1,      // Very zoomed out to show globe
+    bearing: 0,   // Starting rotation
+    pitch: 0,     // Starting pitch
   });
+
+  const [isAnimating, setIsAnimating] = useState(true);
 
   const [analysisData, setAnalysisData] = useState<AnalyzeResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Store the actual analyzed location (not viewState which can change when panning)
   const [analyzedLocation, setAnalyzedLocation] = useState<{ lat: number; lon: number } | null>(null);
+  
+  // Animation state for drone path
+  const [dashOffset, setDashOffset] = useState(0);
+  
+  // State for minimizing tactical record
+  const [isTacticalRecordMinimized, setIsTacticalRecordMinimized] = useState(false);
 
-  // Extract lon/lat from viewState for internal use
-  const lon = viewState.longitude;
-  const lat = viewState.latitude;
-
-  // Fetch analysis data for the center of Lake Erie
+  // Fetch analysis data for the target location (Lake Erie)
   useEffect(() => {
     const fetchAnalysis = async () => {
       setLoading(true);
       setError(null);
       try {
         const response = await analyzeLocation({
-          lat: lat,
-          lon: lon,
+          lat: TARGET_LAT,
+          lon: TARGET_LON,
         });
         setAnalysisData(response);
         // Store the actual location that was analyzed
-        setAnalyzedLocation({ lat, lon });
+        setAnalyzedLocation({ lat: TARGET_LAT, lon: TARGET_LON });
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch analysis');
         console.error('API Error:', err);
@@ -81,6 +93,127 @@ export default function LakeMap() {
     };
 
     fetchAnalysis();
+  }, []);
+
+  // Animate map from globe view to target location
+  useEffect(() => {
+    // Phase 1: Rotate and move to position above Lake Erie (2.5 seconds)
+    // Phase 2: Zoom into Lake Erie from above (2 seconds)
+    const rotationDuration = 2500;
+    const zoomDuration = 2000;
+    
+    // Start animation after a brief delay to let map load
+    const timeout = setTimeout(() => {
+      // Calculate bearing to target location from center of globe
+      const calculateBearingToTarget = (startLon: number, startLat: number, endLon: number, endLat: number): number => {
+        const dLon = (endLon - startLon) * Math.PI / 180;
+        const startLatRad = startLat * Math.PI / 180;
+        const endLatRad = endLat * Math.PI / 180;
+        
+        const y = Math.sin(dLon) * Math.cos(endLatRad);
+        const x = Math.cos(startLatRad) * Math.sin(endLatRad) - 
+                  Math.sin(startLatRad) * Math.cos(endLatRad) * Math.cos(dLon);
+        
+        const bearing = Math.atan2(y, x);
+        return (bearing * 180 / Math.PI + 360) % 360;
+      };
+
+      const targetBearing = calculateBearingToTarget(0, 0, TARGET_LON, TARGET_LAT);
+      const startTime = Date.now();
+      const startZoom = 1;
+      const startLon = 0;
+      const startLat = 0;
+      const startBearing = 0;
+      
+      // Position above Lake Erie (slightly north for better view)
+      const aboveLakeLat = TARGET_LAT + 0.5; // Position slightly north of Lake Erie
+      const aboveLakeLon = TARGET_LON;
+      const aboveLakeZoom = 3; // Zoomed out but positioned above the lake
+
+      // Phase 1: Rotate and move to position above Lake Erie
+      const rotateToAboveTarget = () => {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / rotationDuration, 1);
+        
+        // Easing function (ease-in-out)
+        const easeInOut = progress < 0.5
+          ? 2 * progress * progress
+          : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+
+        // Interpolate bearing
+        const currentBearing = startBearing + (targetBearing - startBearing) * easeInOut;
+        
+        // Interpolate position to above Lake Erie
+        const currentLon = startLon + (aboveLakeLon - startLon) * easeInOut;
+        const currentLat = startLat + (aboveLakeLat - startLat) * easeInOut;
+        
+        // Slightly zoom in as we move (but stay zoomed out)
+        const currentZoom = startZoom + (aboveLakeZoom - startZoom) * easeInOut;
+
+        setViewState({
+          longitude: currentLon,
+          latitude: currentLat,
+          zoom: currentZoom,
+          bearing: currentBearing,
+          pitch: 0,
+        });
+
+        if (progress < 1) {
+          requestAnimationFrame(rotateToAboveTarget);
+        } else {
+          // Phase 2: Zoom into Lake Erie from above
+          const zoomStartTime = Date.now();
+          
+          const zoomToTarget = () => {
+            const zoomElapsed = Date.now() - zoomStartTime;
+            const zoomProgress = Math.min(zoomElapsed / zoomDuration, 1);
+            
+            // Easing function (ease-in-out)
+            const zoomEaseInOut = zoomProgress < 0.5
+              ? 2 * zoomProgress * zoomProgress
+              : 1 - Math.pow(-2 * zoomProgress + 2, 2) / 2;
+
+            // Interpolate zoom from above-lake position to target zoom
+            const currentZoom = aboveLakeZoom + (TARGET_ZOOM - aboveLakeZoom) * zoomEaseInOut;
+            
+            // Move position from above Lake Erie to centered on Lake Erie
+            const currentLon = aboveLakeLon + (TARGET_LON - aboveLakeLon) * zoomEaseInOut;
+            const currentLat = aboveLakeLat + (TARGET_LAT - aboveLakeLat) * zoomEaseInOut;
+
+            setViewState({
+              longitude: currentLon,
+              latitude: currentLat,
+              zoom: currentZoom,
+              bearing: targetBearing, // Keep the rotation
+              pitch: 0,
+            });
+
+            if (zoomProgress < 1) {
+              requestAnimationFrame(zoomToTarget);
+            } else {
+              setIsAnimating(false);
+            }
+          };
+
+          requestAnimationFrame(zoomToTarget);
+        }
+      };
+
+      requestAnimationFrame(rotateToAboveTarget);
+    }, 500);
+
+    return () => {
+      clearTimeout(timeout);
+    };
+  }, []); // Run only once on mount
+
+  // Animation loop for drone path (animated dashes)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setDashOffset((prev) => (prev + 1) % 6); // Cycle through dash pattern
+    }, 100); // Update every 100ms for smooth animation
+
+    return () => clearInterval(interval);
   }, []);
 
   // Build drift prediction GeoJSON from API response
@@ -148,6 +281,18 @@ export default function LakeMap() {
     ? `${API_BASE_URL}${analysisData.image_url}`
     : '/demo_heatmap.png';
 
+  // Get risk score color based on percentage
+  const getRiskScoreColor = (score: number): string => {
+    const percentage = score * 100;
+    if (percentage < 25) {
+      return 'text-green-600'; // Low risk - green (0-25%)
+    } else if (percentage < 50) {
+      return 'text-yellow-600'; // Medium risk - yellow (25-50%)
+    } else {
+      return 'text-red-600'; // High risk - red (50-100%)
+    }
+  };
+
   
   return (
     <div className="relative w-full h-screen bg-slate-50">
@@ -156,22 +301,44 @@ export default function LakeMap() {
           Bloomguard
         </h1>
         {analysisData && (
-          <div className="text-sm text-slate-600">
-            <p>Risk Score: <span className="font-semibold">{(analysisData.risk_score * 100).toFixed(0)}%</span></p>
+          <div className="text-sm">
+            <p className="text-slate-600">
+              Risk Score: <span className={`font-bold ${getRiskScoreColor(analysisData.risk_score)}`}>{(analysisData.risk_score * 100).toFixed(0)}%</span>
+            </p>
           </div>
         )}
-              {/* AI ANALYST DISPLAY */}
+              {/* TACTICAL RECORD DISPLAY */}
               {analysisData?.ai_report && (
-            <div className="mt-4 p-3 bg-slate-800 rounded border-l-4 border-red-500 shadow-sm max-w-sm">
-              <div className="flex items-center gap-2 mb-2">
-                 <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                 <span className="text-[10px] font-bold tracking-widest text-slate-400 uppercase">
-                   AI Tactical Report
-                 </span>
+            <div className="mt-4 bg-slate-800 rounded border-l-4 border-red-500 shadow-sm max-w-sm">
+              <div className="flex items-center justify-between gap-2 p-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                  <span className="text-[10px] font-bold tracking-widest text-slate-400 uppercase">
+                    Tactical Report
+                  </span>
+                </div>
+                <button
+                  onClick={() => setIsTacticalRecordMinimized(!isTacticalRecordMinimized)}
+                  className="text-slate-400 hover:text-slate-200 transition-colors p-1"
+                  aria-label={isTacticalRecordMinimized ? "Expand" : "Minimize"}
+                >
+                  <svg 
+                    className={`w-4 h-4 transition-transform ${isTacticalRecordMinimized ? 'rotate-180' : ''}`}
+                    fill="none" 
+                    viewBox="0 0 24 24" 
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
               </div>
-              <p className="text-xs font-mono text-green-400 leading-relaxed">
-                {analysisData.ai_report}
-              </p>
+              {!isTacticalRecordMinimized && (
+                <div className="px-3 pb-3">
+                  <p className="text-xs font-mono text-green-400 leading-relaxed">
+                    {analysisData.ai_report}
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
@@ -180,10 +347,47 @@ export default function LakeMap() {
       </div>
       <Map
         {...viewState}
-        onMove={(evt) => setViewState(evt.viewState)}
+        onMove={(evt) => {
+          // Only allow manual pan/zoom after animation completes
+          if (!isAnimating) {
+            setViewState(evt.viewState);
+          }
+        }}
         mapboxAccessToken={process.env.NEXT_PUBLIC_MAPBOX_TOKEN || ''}
         style={{ width: '100%', height: '100%' }}
         mapStyle="mapbox://styles/mapbox/light-v11"
+        // Custom map styling to match muted UI theme
+        onLoad={(e) => {
+          const map = e.target;
+          
+          // Helper function to safely set paint property
+          const safeSetPaintProperty = (layerId: string, property: any, value: string) => {
+            try {
+              const layer = map.getLayer(layerId);
+              if (layer) {
+                map.setPaintProperty(layerId, property, value);
+              }
+            } catch (err) {
+              console.warn(`Could not set ${property} for layer ${layerId}:`, err);
+            }
+          };
+
+          // Customize water color to match muted blue theme
+          safeSetPaintProperty('water', 'fill-color', '#E0F2FE'); // muted-blue-100
+          
+          // Customize land/background to match slate theme
+          safeSetPaintProperty('land', 'fill-color', '#F8FAFC'); // slate-50
+          
+          // Mute the background
+          safeSetPaintProperty('background', 'background-color', '#F8FAFC'); // slate-50
+          
+          // Soften road colors (these layer names may vary by style)
+          safeSetPaintProperty('road-street', 'line-color', '#E2E8F0'); // muted-gray-200
+          safeSetPaintProperty('road-primary', 'line-color', '#CBD5E1'); // muted-gray-300
+          
+          // Mute building colors
+          safeSetPaintProperty('building', 'fill-color', '#F1F5F9'); // slate-100
+        }}
       >
         <Source
           id="heatmap-overlay"
@@ -213,7 +417,7 @@ export default function LakeMap() {
             }}
           />
         </Source>
-        {/* PHASE 4: Drone Flight Path Layer - Purple dashed line from Port Stanley → Algae → Zigzag */}
+        {/* PHASE 4: Drone Flight Path Layer - Animated dashed line from Port Stanley → Algae → Zigzag */}
         {flightPathGeoJSON && (
           <Source id="flight-path" type="geojson" data={flightPathGeoJSON}>
             <Layer
@@ -221,9 +425,9 @@ export default function LakeMap() {
               type="line"
               paint={{
                 'line-color': '#06B6D4', // Vibrant cyan/teal for drone path
-                'line-width': 4,
+                'line-width': 4 + Math.sin(dashOffset * 0.5) * 0.5, // Subtle animated width
                 'line-opacity': 0.9,
-                'line-dasharray': [4, 2], // Dashed pattern
+                'line-dasharray': [4 + dashOffset * 0.3, 2 - dashOffset * 0.1], // Animated dash pattern
               }}
               layout={{
                 'line-cap': 'round',
