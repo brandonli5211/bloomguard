@@ -2,6 +2,14 @@
 
 BloomGuard is a scientific dashboard for monitoring and responding to toxic algal blooms in real-time. It combines satellite imagery, weather data, and AI analysis to detect, predict, and plan responses to environmental threats.
 
+Winner of Best Environmental Hack at Deltahacks! 
+
+Demo Video:
+https://vimeo.com/1153297384?share=copy
+
+Devpost: 
+https://devpost.com/software/bloomguard?_gl=1*q15acy*_gcl_au*NTc4MTI5MDU0LjE3NjEwOTU1NjM.*_ga*MjE3MzY3MjQxLjE3NjEwOTU1NjM.*_ga_0YHJK3Y10M*czE3NjgyNDY0MzQkbzI1JGcxJHQxNzY4MjQ3MDk4JGo1NCRsMCRoMA..
+
 ## Features
 
 - Real-time satellite imagery analysis using Sentinel Hub
